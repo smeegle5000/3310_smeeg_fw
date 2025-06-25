@@ -91,6 +91,7 @@ uint8_t KB_DOUBLE_PRESS_ENABLED = 0;
 uint8_t KB_DOUBLE_PRESS_EVENT_COUNT = 0;
 bool KB_DEBOUNCING_ACTIVE = true;
 uint8_t KB_DEBOUNCING_WINDOW = 5; //miliseconds
+uint8_t KB_TAP_OR_T9 = 0; //0 = tap 1 = t9
 //
 //internal use on keyboard scanning
 bool KB_KEY_MATCHING = false;
@@ -100,7 +101,6 @@ unsigned long KB_LAST_PRESSED = 0;      //stores timestamp when a key was last p
 unsigned int KB_HOLD_REPEAT_TIMER = 0; //stores timestamp for repeating held keys
 //
 //
-
 
 
 
@@ -117,9 +117,19 @@ char DISP_TITLE_TEXT[16] = "";
 uint8_t DISP_TITLE_TEXT_INDEX = 0;
 uint8_t DISP_CENTER_POINT = 0;
 char DISP_INTERNAL_BUFFER[16] = "";
+char DISP_INTERNAL_BUFFER_2[32] = "";
 uint8_t DISP_CONTRAST = 110;
 char DISP_MESSAGE_BUFFER[1024] = "";
 uint16_t DISP_MESSAGE_BUFFER_INDEX = 0;
+uint8_t DISP_MESSAGE_LENGTH = 0;
+uint8_t DISP_MESSAGE_PRINT_X = 0;
+uint8_t DISP_MESSAGE_PRINT_Y = 0;
+
+//extra stuff while i figure out pointers and such
+int a = 0;
+int b = 0;
+int c = 0;
+const char* CURRENT_CHAR_POINTER = DISP_MESSAGE_BUFFER;
 
 
 // Using software SPI on these pins for nokia 3310 display
@@ -392,7 +402,7 @@ void loop() {
     }
   }
   
-  if (DISP_PAGE_A != 0) {
+  if (DISP_PAGE_A == 100) {
     u8g2.setFont(NokiaSmallPlain);
     u8g2.setCursor(64, 17);
     u8g2.print(DISP_PAGE_A);
@@ -516,18 +526,141 @@ void loop() {
     u8g2.drawStr(5, 28, "(work in progress)");
     
   }
+
+
   if (DISP_PAGE_A == 23) {                                      //debug
     u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(27, 7, "Debug");
+    u8g2.setCursor(27, 7);
+    u8g2.print("Debug");
+    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
     u8g2.setCursor(1, 17);
-    u8g2.print(DISP_MESSAGE_BUFFER);
-    u8g2.setCursor(1, 27);
     
-    if (KB_BUFFER >= '0' && KB_BUFFER <= '9') {
+    if (KB_TAP_OR_T9 == 1) {
+    //u8g2.print(DISP_MESSAGE_BUFFER);
+    DISP_MESSAGE_LENGTH = (u8g2.getUTF8Width(String(DISP_MESSAGE_BUFFER).c_str()) + 1);
+    u8g2.setCursor (0, 15);
+
+      int start = 0;
+      int end = 0;
+      int wordcount = 0;
+      int wordcount2[16] = {0};
+      int wordlen = 0;
+      int cursor_y = 15;
+      int cursor_x = 0;
+      int a = 0;
+
+    while(DISP_MESSAGE_BUFFER[start] != '\0') {
+
+      end = start;
+
+        while (DISP_MESSAGE_BUFFER[end] != ' ' && DISP_MESSAGE_BUFFER[end] != '\0') {
+
+          ++end;
+          
+        }
+      int length = end - start;
+      strncpy(DISP_INTERNAL_BUFFER_2, DISP_MESSAGE_BUFFER + start, length);
+      //DISP_INTERNAL_BUFFER_2[length] = ' ';
+      DISP_INTERNAL_BUFFER_2[length + 0] = '\0';
+
+      int wordwidth = u8g2.getUTF8Width(DISP_INTERNAL_BUFFER_2);
+      int spacewidth = u8g2.getUTF8Width(" ");
+
+      if ((cursor_x + wordwidth) > 84) {
+        cursor_x = 0;
+        cursor_y += 8;
+      }
+      if ((cursor_x + wordwidth) > 75) {
+        a = 1;
+      } else {
+        a = 0;
+      }
+
+      u8g2.setCursor(cursor_x, cursor_y);
+      u8g2.print(DISP_INTERNAL_BUFFER_2);
+      cursor_x += wordwidth;
+
+      if (DISP_MESSAGE_BUFFER[end] == ' ') {
+        u8g2.setCursor(cursor_x, cursor_y);
+        u8g2.print(" ");
+        cursor_x += spacewidth;
+        end++;
+      }
+
+      start = end;
+    }
+/*
+
+        
+      wordcount2[wordcount] = (u8g2.getUTF8Width(DISP_INTERNAL_BUFFER_2) - 0);
+      wordcount++;
+
+      if (DISP_MESSAGE_BUFFER[end] == ' ') {
+        end++;
+      }
+      start = end;
+
+      wordlen = 0; 
+      for ( int i = 0; i < wordcount; i++ ) wordlen += wordcount2[ i ];
+      wordlen = (wordlen - 3);
+        
+      if (wordlen > 84) {
+        u8g2.setCursor(0, (cursor_offset + 8));
+
+      }
+      u8g2.print(DISP_INTERNAL_BUFFER_2);
+    }
+
+    for ( int i = 0; i < wordcount; i++ ) wordlen += wordcount2[ i ];
+*/
+/*
+    DISP_MESSAGE_PRINT_X = 1;
+    DISP_MESSAGE_PRINT_Y = 27;
+    DISP_INTERNAL_BUFFER_2[1] = '\0';
+    for (int i = 0; i <= 10; i++) {
+      DISP_INTERNAL_BUFFER_2[0] = DISP_MESSAGE_BUFFER[i];
+      if (DISP_MESSAGE_PRINT_X + (u8g2.getUTF8Width(String(DISP_INTERNAL_BUFFER_2).c_str()) + 1) > 82) {
+        DISP_MESSAGE_PRINT_X = 0;
+        DISP_MESSAGE_PRINT_Y += 10;
+      }
+      u8g2.setCursor(DISP_MESSAGE_PRINT_X, DISP_MESSAGE_PRINT_Y);
+      u8g2.print(DISP_INTERNAL_BUFFER_2);
+      DISP_MESSAGE_PRINT_X += (u8g2.getUTF8Width(DISP_INTERNAL_BUFFER_2) + 1);
+    }
+
+    for (int i = 0; i < strlen(DISP_MESSAGE_BUFFER); i++) {
+
+     if (u8g2.getUTF8Width(DISP_MESSAGE_BUFFER) > 82) {
+      DISP_INTERNAL_BUFFER_2 = DISP_MESSAGE_BUFFER + 20;
+      u8g2.drawStr(1, 33, offsetText);
+     } 
+    }
+
+    for (int i = 0; i < strlen(DISP_MESSAGE_BUFFER); i++) {
+      DISP_INTERNAL_BUFFER_2[0] = DISP_MESSAGE_BUFFER[i];
+      DISP_INTERNAL_BUFFER_2[1] = '\0';
+      DISP_CENTER_POINT = (DISP_CENTER_POINT + u8g2.getUTF8Width(DISP_INTERNAL_BUFFER_2));
+
+      if (DISP_CENTER_POINT > 82) {
+        u8g2.setCursor(DISP_CENTER_POINT, 33);
+      } else {
+        u8g2.setCursor(DISP_CENTER_POINT, 23);
+      }
       
+      u8g2.print(DISP_INTERNAL_BUFFER_2);
+    }
+*/  
+    if (a == 1) u8g2.setCursor(76, 7);
+
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    if (KB_BUFFER >= '1' && KB_BUFFER <= '9') {
       u8g2.print(KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]);
       DISP_INTERNAL_BUFFER[0] = (KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]);
       
+    }
+    if (KB_BUFFER == '0') {
+      u8g2.print(">");
+      DISP_INTERNAL_BUFFER[0] = ' ';
     }
     if (KB_BEEN_READ == false && KB_BUFFER == '#') {
       DISP_MESSAGE_BUFFER[DISP_MESSAGE_BUFFER_INDEX] = DISP_INTERNAL_BUFFER[0];
@@ -537,15 +670,34 @@ void loop() {
     }
 
     if ((KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]) == '\0') KB_DOUBLE_PRESS_EVENT_COUNT = 0;
-    //u8g2.print(getWord(dict_en, DISP_TEXT_BUFFER));
+    
+
+    } else {
+      u8g2.print(getWord(dict_en, DISP_TEXT_BUFFER));
+    }
+    
+    
     if (KB_BUFFER == '0' && KB_BEEN_READ == false) {
       DISP_TEXT_BUFFER[0] = '\0';
       DISP_TEXT_BUFFER_INDEX = 0;
     }
+    /*
     u8g2.setCursor(1, 37);
+    u8g2.print(".");
+    u8g2.print(wordlen);
+    u8g2.print(".");
     u8g2.print(DISP_MESSAGE_BUFFER_INDEX);
     u8g2.print(INTERNAL_FLAG_1);
+
+    u8g2.print(u8g2.getUTF8Width(DISP_MESSAGE_BUFFER));
+
+    u8g2.setCursor(u8g2.getUTF8Width(DISP_MESSAGE_BUFFER), 17);
+    u8g2.print(".");
+    */
   }
+
+
+
   if (DISP_PAGE_C == 1) {                                                                 //contrast setting
     u8g2.clearBuffer();                                                                   //to stop the menu from drawing below this menu, inefficient, i know
     DISP_CONTRAST = DISP_PAGE_B;
@@ -995,6 +1147,28 @@ void loop() {
     u8g2.print(".");
     EEPROM.get(18, BATTERY_CHARGING);
     u8g2.print(BATTERY_CHARGING);
+  }
+
+  if (DISP_PAGE_C == 9) {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    u8g2.drawStr(21, 7, "keyboard");
+    u8g2.setCursor(0, 20);
+    u8g2.print("entewr to toggle");
+    u8g2.setCursor(0, 30);
+    if (KB_TAP_OR_T9 == 1) u8g2.print("gui wip, am sleepy");
+    if (KB_BUFFER == 'E' && KB_BEEN_READ == false) {
+      if (DISP_PAGE_B == 0) {
+        if (KB_TAP_OR_T9 >= 1) {
+          KB_TAP_OR_T9 = 0;
+        } else {
+          KB_TAP_OR_T9 = 1;
+        }
+      }
+      KB_BEEN_READ = true;
+    }
+    u8g2.setCursor(0, 40);
+    u8g2.print("affects debug menu");
   }
 
 /*
