@@ -258,6 +258,8 @@ void setup() {
   if (INTERNAL_FLAG_1 == 1) {                                                     //boot delay so we can show the goods (m17 boot splash)
     delay(2000);
   }
+
+  KB_TAP_OR_T9 = 1;
 }
 
 void loop() {
@@ -319,16 +321,6 @@ void loop() {
 
   }
   
-
-  if (KB_BEEN_READ == false) {
-    DISP_TEXT_BUFFER[DISP_TEXT_BUFFER_INDEX] = KB_BUFFER;
-    DISP_TEXT_BUFFER_INDEX++;
-    DISP_TEXT_BUFFER[DISP_TEXT_BUFFER_INDEX] = '\0';
-  }
-
-  if (DISP_TEXT_BUFFER_INDEX == 14) {
-    DISP_TEXT_BUFFER_INDEX = 0;
-  }
      
 
   if (DISP_PAGE_A == 0) {
@@ -535,7 +527,7 @@ void loop() {
     u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
     u8g2.setCursor(1, 17);
     
-    if (KB_TAP_OR_T9 == 1) {
+    
     //u8g2.print(DISP_MESSAGE_BUFFER);
     DISP_MESSAGE_LENGTH = (u8g2.getUTF8Width(String(DISP_MESSAGE_BUFFER).c_str()) + 1);
     u8g2.setCursor (0, 15);
@@ -544,10 +536,11 @@ void loop() {
       int end = 0;
       int wordcount = 0;
       int wordcount2[16] = {0};
-      int wordlen = 0;
+      int wordlength = 0;
       int cursor_y = 15;
       int cursor_x = 0;
       int a = 0;
+      const char* t9word = "";
 
     while(DISP_MESSAGE_BUFFER[start] != '\0') {
 
@@ -570,18 +563,19 @@ void loop() {
         cursor_x = 0;
         cursor_y += 8;
       }
-      if ((cursor_x + wordwidth) > 75) {
+      if ((cursor_x + wordwidth + strlen(getWord(dict_en, DISP_TEXT_BUFFER))) > 72) {
         a = 1;
       } else {
         a = 0;
       }
 
-      u8g2.setCursor(cursor_x, cursor_y);
+
+      u8g2.setCursor(cursor_x, (cursor_y - DISP_SCROLL_OFFSET));
       u8g2.print(DISP_INTERNAL_BUFFER_2);
       cursor_x += wordwidth;
 
       if (DISP_MESSAGE_BUFFER[end] == ' ') {
-        u8g2.setCursor(cursor_x, cursor_y);
+        u8g2.setCursor(cursor_x, (cursor_y - DISP_SCROLL_OFFSET));
         u8g2.print(" ");
         cursor_x += spacewidth;
         end++;
@@ -589,6 +583,25 @@ void loop() {
 
       start = end;
     }
+
+    if (cursor_y >= 48) {
+      DISP_SCROLL_OFFSET = cursor_y - 48;
+    }
+
+    if ((KB_BUFFER >= '1' && KB_BUFFER <= '9' || KB_BUFFER == '*') && KB_BEEN_READ == false) {
+      DISP_TEXT_BUFFER[DISP_TEXT_BUFFER_INDEX] = KB_BUFFER;
+      DISP_TEXT_BUFFER_INDEX++;
+      DISP_TEXT_BUFFER[DISP_TEXT_BUFFER_INDEX] = '\0';
+    }
+    if (DISP_TEXT_BUFFER_INDEX == 16) {
+      DISP_TEXT_BUFFER_INDEX = 0;
+    }
+
+    u8g2.drawBox(0, 0, 84, 8);
+    u8g2.setDrawColor(2);
+    u8g2.drawBox(0, 0, 84, 8);
+    u8g2.setDrawColor(1);
+    u8g2.drawLine(0, 7, 83, 7);
 /*
 
         
@@ -650,7 +663,10 @@ void loop() {
       u8g2.print(DISP_INTERNAL_BUFFER_2);
     }
 */  
-    if (a == 1) u8g2.setCursor(76, 7);
+    
+    if (a == 1) u8g2.setCursor(37, 7);
+
+    if (KB_TAP_OR_T9 == 1) {
 
     u8g2.setFont(u8g2_font_nokiafc22_tr);
     if (KB_BUFFER >= '1' && KB_BUFFER <= '9') {
@@ -671,16 +687,41 @@ void loop() {
 
     if ((KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]) == '\0') KB_DOUBLE_PRESS_EVENT_COUNT = 0;
     
-
-    } else {
-      u8g2.print(getWord(dict_en, DISP_TEXT_BUFFER));
-    }
-    
-    
     if (KB_BUFFER == '0' && KB_BEEN_READ == false) {
       DISP_TEXT_BUFFER[0] = '\0';
       DISP_TEXT_BUFFER_INDEX = 0;
     }
+    u8g2.drawStr(69, 7, "tap");
+
+    } else {
+      u8g2.setFont(u8g2_font_nokiafc22_tr);
+      t9word = getWord(dict_en, DISP_TEXT_BUFFER);
+      wordlength = strlen(t9word);
+      u8g2.print(t9word);
+      u8g2.drawStr(72, 7, "T9");
+      if (KB_BEEN_READ == false && KB_BUFFER == '0') {
+        strncpy(&DISP_MESSAGE_BUFFER[DISP_MESSAGE_BUFFER_INDEX], t9word, wordlength);
+        DISP_MESSAGE_BUFFER_INDEX += wordlength;
+        DISP_MESSAGE_BUFFER[DISP_MESSAGE_BUFFER_INDEX] = ' ';
+        DISP_MESSAGE_BUFFER_INDEX++;
+        DISP_MESSAGE_BUFFER[DISP_MESSAGE_BUFFER_INDEX] = '\0';
+        DISP_TEXT_BUFFER[0] = '\0';
+        DISP_TEXT_BUFFER_INDEX = 0;
+      }
+
+      if (KB_BUFFER == '#' && KB_BEEN_READ == false) {
+        DISP_TEXT_BUFFER[0] = '\0';
+        DISP_TEXT_BUFFER_INDEX = 0;
+      }
+    }
+
+
+    u8g2.setCursor(0, 7);
+    u8g2.print(DISP_MESSAGE_BUFFER_INDEX);
+    u8g2.print("/820");
+
+    
+
     /*
     u8g2.setCursor(1, 37);
     u8g2.print(".");
@@ -1222,7 +1263,7 @@ void loop() {
       if (DISP_PAGE_B == 0) DISP_PAGE_A = 20, DISP_NUM_OPTIONS = 2;  //display
       if (DISP_PAGE_B == 3) DISP_PAGE_A = 21, DISP_NUM_OPTIONS = 5;  //keyboard
       if (DISP_PAGE_B == 2) DISP_PAGE_A = 22;                        //radio
-      if (DISP_PAGE_B == 1) DISP_PAGE_A = 23, DISP_TEXT_BUFFER[0] = '\0', DISP_TEXT_BUFFER_INDEX = 0;                        //debug
+      if (DISP_PAGE_B == 1) DISP_PAGE_A = 23, DISP_TEXT_BUFFER[0] = '\0', DISP_TEXT_BUFFER_INDEX = 0, DISP_SCROLL_OFFSET = 0;                        //debug
       DISP_PAGE_B = 0;
     } else if (DISP_PAGE_A == 20) {
       if (DISP_PAGE_B == 0) DISP_PAGE_C = 1, DISP_NUM_OPTIONS = 255, DISP_PAGE_B = DISP_CONTRAST;                            //contrast
