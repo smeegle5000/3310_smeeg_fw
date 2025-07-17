@@ -19,6 +19,8 @@ extern "C" {
 #define PIN_BATTERY_VOLTAGE PA1
 #define PIN_BATTERY_CHARGE PA5
 
+//https://www.st.com/en/development-tools/stm32cubeprog.html
+
 float BATTERY_VOLTAGE = 0;
 int BATTERY_CHARGING = 0;             //no idea why but a bool or byte just does not work for this
 uint8_t BATTERY_AVERAGE[8] = {0};
@@ -29,13 +31,19 @@ uint8_t BACKLIGHT_FREQ = 0;   //note to self, make this x20, it would probably b
 uint8_t BACKLIGHT_ENABLE = 0; //0 = off 1 = on 2 = always on
 uint8_t VIBRATION_ON_KEYPRESS_ENABLE = 1;
 uint8_t VIBRATION_ON_KEYPRESS = 200;
-unsigned long VIBRATION_ON_KEYPRESS_TIMER = 0;
+unsigned long KEYPRESS_FEEDBACK_TIMER = 0;
+unsigned long AUDIO_FEEDBACK_TIMER = 0;
+uint8_t AUDIO_ON_KEYPRESS_ENABLE = 0;
+uint8_t AUDIO_ON_KEYPRESS_DURATION = 128;
+uint8_t AUDIO_ON_KEYPRESS_FREQ = 0;
+uint8_t AUDIO_ON_KEYPRESS_VOLUME = 0;
 uint8_t KB_LIGHT_ON_PRESS = 0;  //x40 to make it up to 10 seconds
 uint8_t KB_LIGHT_ON_PRESS_ENABLE = 0;
 unsigned long KB_LIGHT_ON_PRESS_TIMER = 0;
 unsigned long INTERNAL_TIMER_1 = 0;
 uint8_t INTERNAL_TIMER_2 = 0;
 uint8_t INTERNAL_FLAG_1 = 0;  //general purpose flag, currently used for backlight menu and splash screen toggle, be sure to reset before using
+uint8_t INTERNAL_FLAG_2 = 0;  //another, this time for the submenu in feedback
 
 
 
@@ -131,12 +139,17 @@ int b = 0;
 int c = 0;
 const char* CURRENT_CHAR_POINTER = DISP_MESSAGE_BUFFER;
 
+const char* noteNames[12] = {
+  "C", "C#", "D", "D#", "E", "F",
+  "F#", "G", "G#", "A", "A#", "B"
+};
+
 
 // Using software SPI on these pins for nokia 3310 display
 U8G2_PCD8544_84X48_F_4W_SW_SPI u8g2(U8G2_R0, DISP_PIN_SCK, DISP_PIN_SDIN, DISP_PIN_CS, DISP_PIN_DC, DISP_PIN_RST);
 
 int RF_RSSI = 69;             //temp value, no code to actually update this
-uint8_t RF_RSSI_8 = 0;
+uint8_t RF_RSSI_8 = 0;        //0-8 value derived from rf_rssi used to draw the little signal strength meter
 uint8_t RF_TXRX_STATE = 0;    //temp value, no code to actually update this
 float RF_TX_FREQ = 433.4750;  //temp value, no code to actually update this
 float RF_RX_FREQ = 433.4750;  //temp value, no code to actually update this
@@ -167,16 +180,17 @@ void setup() {
     EEPROM.put(7, 0);     //no time for lights on keypress
     EEPROM.put(8, 0);     //disable vibes
     EEPROM.put(9, 0);     //0 vibe time
-    //10 audio feedback on/off
-    //11 audio feedback frequency
-    //12 audio feedback length/volume
-    EEPROM.put(13, 1);    //debouncing enabled
-    EEPROM.put(14, 5);    //5ms debounce settle time
-    EEPROM.put(15, 1);    //double tap enabled
-    EEPROM.put(16, 13);    //double tap window (x40)
-    EEPROM.put(17, 1);    //hold repeat enable
-    EEPROM.put(18, 75);   //repeat delay (x20)
-    EEPROM.put(19, 80);   //hold repeat speed
+    EEPROM.put(10, 0);    //audio feedback on/off
+    EEPROM.put(11, 30);   //audio feedback frequency
+    EEPROM.put(12, 10);   //audio feedback length
+    EEPROM.put(13, 0);    //audio feedback volume
+    EEPROM.put(14, 1);    //debouncing enabled
+    EEPROM.put(15, 5);    //5ms debounce settle time
+    EEPROM.put(16, 1);    //double tap enabled
+    EEPROM.put(17, 13);    //double tap window (x40)
+    EEPROM.put(18, 1);    //hold repeat enable
+    EEPROM.put(19, 75);   //repeat delay (x20)
+    EEPROM.put(20, 80);   //hold repeat speed
 
   }                       //for some reason the eeprom writing appears to be doing an entire erase/write cycle for each address
                           //in the short term this is probably fine but in the long term it would be good to find an alternitive way to do this
@@ -190,13 +204,17 @@ void setup() {
   EEPROM.get(7, KB_LIGHT_ON_PRESS);
   EEPROM.get(8, VIBRATION_ON_KEYPRESS_ENABLE);
   EEPROM.get(9, VIBRATION_ON_KEYPRESS);
-  EEPROM.get(13, KB_DEBOUNCING_ACTIVE);
-  EEPROM.get(14, KB_DEBOUNCING_WINDOW);
-  EEPROM.get(15, KB_DOUBLE_PRESS_ENABLED);
-  EEPROM.get(16, KB_DOUBLE_PRESS_TIME);
-  EEPROM.get(17, KB_HOLD_REPEAT);    
-  EEPROM.get(18, KB_HOLD_REPEAT_DELAY);
-  EEPROM.get(19, KB_HOLD_REPEAT_SPEED);
+  EEPROM.get(10, AUDIO_ON_KEYPRESS_ENABLE);
+  EEPROM.get(11, AUDIO_ON_KEYPRESS_FREQ);
+  EEPROM.get(12, AUDIO_ON_KEYPRESS_DURATION);
+  EEPROM.put(13, AUDIO_ON_KEYPRESS_VOLUME);
+  EEPROM.get(14, KB_DEBOUNCING_ACTIVE);
+  EEPROM.get(15, KB_DEBOUNCING_WINDOW);
+  EEPROM.get(16, KB_DOUBLE_PRESS_ENABLED);
+  EEPROM.get(17, KB_DOUBLE_PRESS_TIME);
+  EEPROM.get(18, KB_HOLD_REPEAT);    
+  EEPROM.get(19, KB_HOLD_REPEAT_DELAY);
+  EEPROM.get(20, KB_HOLD_REPEAT_SPEED);
 
   
   u8g2.setContrast(DISP_CONTRAST);
@@ -272,18 +290,31 @@ void loop() {
     }
 
     if (millis() < KB_LIGHT_ON_PRESS_TIMER) {
+      analogWriteFrequency(BACKLIGHT_FREQ * 20);
       analogWrite(PIN_BACKLIGHT, BACKLIGHT_PWM);
     } else {
       analogWrite(PIN_BACKLIGHT, 0);
     }
   }
 
-  if (VIBRATION_ON_KEYPRESS_ENABLE == 1) {
+  if (AUDIO_ON_KEYPRESS_ENABLE == 1) {
     if (KB_BEEN_READ == false) {
-      VIBRATION_ON_KEYPRESS_TIMER = (millis() + (VIBRATION_ON_KEYPRESS));
+      AUDIO_FEEDBACK_TIMER = (millis() + (AUDIO_ON_KEYPRESS_DURATION));
+      analogWriteFrequency((440.0 * pow(2.0, ((21 + (AUDIO_ON_KEYPRESS_FREQ / 2) + ((AUDIO_ON_KEYPRESS_FREQ % 2) * 0.5)) - 69) / 12.0)));
+      analogWrite(PIN_BUZZER, AUDIO_ON_KEYPRESS_VOLUME);
     }
 
-    if (millis() < VIBRATION_ON_KEYPRESS_TIMER) {
+    if (millis() > AUDIO_FEEDBACK_TIMER) {
+      analogWrite(PIN_BUZZER, 0);      
+    }
+  }
+
+  if (VIBRATION_ON_KEYPRESS_ENABLE == 1) {
+    if (KB_BEEN_READ == false) {
+      KEYPRESS_FEEDBACK_TIMER = (millis() + (VIBRATION_ON_KEYPRESS));
+    }
+
+    if (millis() < KEYPRESS_FEEDBACK_TIMER) {
       digitalWrite(PIN_VIBES, HIGH);
     } else {
       digitalWrite(PIN_VIBES, LOW);
@@ -428,6 +459,7 @@ void loop() {
     u8g2.drawStr(29, 7, "Inbox");
     u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
     u8g2.drawStr(5, 28, "(work in progress)");
+    playMidi(PIN_BUZZER, midi1, ARRAY_LEN(midi1));
   }
   if (DISP_PAGE_A == 12) {                   //settings submenu
     u8g2.setFont(u8g2_font_nokiafc22_tr);
@@ -453,7 +485,36 @@ void loop() {
     u8g2.drawStr(1, 23, "based on sp5wwp's");
     u8g2.drawStr(1, 31, "M17_3310-fw.  Also");
     u8g2.drawStr(1, 39, "Implements spwwp's");
-    u8g2.drawStr(1, 47, "T9 typing library");
+    //u8g2.drawStr(1, 47, "T9 typing library");
+    //tone(PIN_BUZZER, 27.5 * pow(2.0, map(AUDIO_ON_KEYPRESS_FREQ, 0, 255, 0, 87) / 12.0), AUDIO_ON_KEYPRESS_DURATION);
+    //AUDIO_ON_KEYPRESS_FREQ++;
+    //u8g2.setCursor(1, 47);
+    //u8g2.print(AUDIO_ON_KEYPRESS_FREQ);
+    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
+    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
+
+    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
+    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
+
+    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
+    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
+
+    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
+    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
+
+    tone(PIN_BUZZER, 277, 118);  delay(118);  // C#4
+    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
+
+    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
+    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
+
+    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
+    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
+
+    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
+    tone(PIN_BUZZER, 196, 118); delay(176);   // G3
+    delay (2000);
+
   }
   if (DISP_PAGE_A == 20) {                                              //display
     u8g2.setFont(u8g2_font_nokiafc22_tr);
@@ -663,6 +724,19 @@ void loop() {
       u8g2.print(DISP_INTERNAL_BUFFER_2);
     }
 */  
+/*
+0 = confirm, add space
+/\
+switch for ergonomics?
+\/
+1 = symbols, long press to switch modes
+# = delete
+* = t9 word cycle
+U = cursor
+D = cursor
+E = cursor
+B = return from typing
+*/
     
     if (a == 1) u8g2.setCursor(37, 7);
 
@@ -697,8 +771,18 @@ void loop() {
       u8g2.setFont(u8g2_font_nokiafc22_tr);
       t9word = getWord(dict_en, DISP_TEXT_BUFFER);
       wordlength = strlen(t9word);
-      u8g2.print(t9word);
       u8g2.drawStr(72, 7, "T9");
+
+      if (t9word == "") {
+        for (int i = 0; i < DISP_TEXT_BUFFER_INDEX; i++) {
+          if (DISP_TEXT_BUFFER[i] >= '0' && DISP_TEXT_BUFFER[i] <= '9'){
+            u8g2.print("?");
+          }
+        }
+      } else {
+        u8g2.print(t9word);
+      }
+      
       if (KB_BEEN_READ == false && KB_BUFFER == '0') {
         strncpy(&DISP_MESSAGE_BUFFER[DISP_MESSAGE_BUFFER_INDEX], t9word, wordlength);
         DISP_MESSAGE_BUFFER_INDEX += wordlength;
@@ -719,6 +803,14 @@ void loop() {
     u8g2.setCursor(0, 7);
     u8g2.print(DISP_MESSAGE_BUFFER_INDEX);
     u8g2.print("/820");
+
+    if (KB_BUFFER == 'E' && KB_BEEN_READ == false) {
+      if (KB_TAP_OR_T9 == 0) {
+        KB_TAP_OR_T9 = 1;
+      } else { 
+        KB_TAP_OR_T9 = 0;
+      }
+    }
 
     
 
@@ -949,6 +1041,209 @@ void loop() {
     if (KB_BUFFER == 'B' && KB_BEEN_READ == false) EEPROM.put(6, KB_LIGHT_ON_PRESS_ENABLE), EEPROM.put(7, KB_LIGHT_ON_PRESS);
   }
 
+
+
+  if (DISP_PAGE_C == 5) {   //new new vibration (now feedback) menu, includes submenu for keypress audio feedback
+    u8g2.clearBuffer();
+
+    if (KB_BUFFER == 'E' && KB_BEEN_READ == false) {
+      
+      if (INTERNAL_FLAG_1 == 1 && INTERNAL_FLAG_2 == 0) {
+    
+        if (DISP_PAGE_B == 0) {
+          if (VIBRATION_ON_KEYPRESS_ENABLE >= 1) {
+            VIBRATION_ON_KEYPRESS_ENABLE = 0;
+            digitalWrite(PIN_VIBES, LOW);
+          } else {
+            VIBRATION_ON_KEYPRESS_ENABLE = 1;
+          }
+        }
+
+        if (DISP_PAGE_B == 1) {
+          INTERNAL_FLAG_2 = 1;
+          DISP_PAGE_B = VIBRATION_ON_KEYPRESS;
+          DISP_NUM_OPTIONS = 255;
+        }
+      
+      }
+      
+      if (INTERNAL_FLAG_1 == 2 && INTERNAL_FLAG_2 == 0) {
+
+        if (DISP_PAGE_B == 0) {
+          if (AUDIO_ON_KEYPRESS_ENABLE >= 1) {
+            AUDIO_ON_KEYPRESS_ENABLE = 0;
+            digitalWrite(PIN_BUZZER, LOW);
+          } else {
+            AUDIO_ON_KEYPRESS_ENABLE = 1;
+          }
+        }
+        if (DISP_PAGE_B == 3) {
+          INTERNAL_FLAG_2 = 3;
+          DISP_PAGE_B = AUDIO_ON_KEYPRESS_DURATION;
+          DISP_NUM_OPTIONS = 255;
+        }  else if (DISP_PAGE_B == 2) {
+          INTERNAL_FLAG_2 = 2;
+          DISP_PAGE_B = AUDIO_ON_KEYPRESS_FREQ;
+          DISP_NUM_OPTIONS = 176;
+        } else if (DISP_PAGE_B == 1) {
+          INTERNAL_FLAG_2 = 1;
+          DISP_PAGE_B = AUDIO_ON_KEYPRESS_VOLUME;
+          DISP_NUM_OPTIONS = 255;
+        }
+
+      }
+
+      if (INTERNAL_FLAG_1 == 0) { //run last to prevent insta button pressing from the execution order
+        if (DISP_PAGE_B == 0 && INTERNAL_FLAG_1 == 0) INTERNAL_FLAG_1 = 1;
+        if (DISP_PAGE_B == 1 && INTERNAL_FLAG_1 == 0) INTERNAL_FLAG_1 = 2, DISP_NUM_OPTIONS = 3;
+      }
+
+      KB_BEEN_READ = 1;
+    }
+
+    if (KB_BUFFER == 'B' && KB_BEEN_READ == false) {
+      
+      if (INTERNAL_FLAG_1 == 0) {
+        digitalWrite(PIN_VIBES, LOW);                 //supress vibration, as it freezes enabled while eeprom is being written
+        EEPROM.put(8, VIBRATION_ON_KEYPRESS_ENABLE);  //vibration on keypress enable
+        EEPROM.put(9, VIBRATION_ON_KEYPRESS);         //vibration on keypress length/intensity
+        EEPROM.put(10, AUDIO_ON_KEYPRESS_ENABLE);     //audio feedback on/off
+        EEPROM.put(11, AUDIO_ON_KEYPRESS_FREQ);       //audio feedback frequency
+        EEPROM.put(12, AUDIO_ON_KEYPRESS_DURATION);   //audio feedback length/volume
+      }
+      
+      if (INTERNAL_FLAG_1 == 1) {
+        
+        if (INTERNAL_FLAG_2 == 0) {  //if we are not selecting a number
+          INTERNAL_FLAG_1 = 0;       //go back to root menu 
+          DISP_PAGE_B = 0;           //cursor on top option
+        }
+        
+        if (INTERNAL_FLAG_2 == 1) {   //if cursor is selected to edit the number  (run after cuz otherwise the order makes it leave both states with one keypress)
+          INTERNAL_FLAG_2 = 0;        //stop selecting the number
+          DISP_PAGE_B = 1;            //reset the cursor position (cuz we are using the cursor position to edit the value)
+          DISP_NUM_OPTIONS = 1;       //reset how many options exist before looping
+        } 
+        KB_BEEN_READ = 1;
+      }
+      
+      if (INTERNAL_FLAG_1 == 2) {
+        
+        if (INTERNAL_FLAG_2 == 0) {
+          INTERNAL_FLAG_1 = 0;      //go back to root menu
+          DISP_PAGE_B = 1;         //cursor on bottom option
+          DISP_NUM_OPTIONS = 1;
+        }
+
+        if (INTERNAL_FLAG_2 == 3) {
+          INTERNAL_FLAG_2 = 0;
+          DISP_PAGE_B = 3;
+          DISP_NUM_OPTIONS = 3;
+        }
+
+        if (INTERNAL_FLAG_2 == 2) {
+          INTERNAL_FLAG_2 = 0;
+          DISP_PAGE_B = 2;
+          DISP_NUM_OPTIONS = 3;
+        }
+
+        if (INTERNAL_FLAG_2 == 1) {
+          INTERNAL_FLAG_2 = 0;
+          DISP_PAGE_B = 1;
+          DISP_NUM_OPTIONS = 3;
+        }
+        KB_BEEN_READ = 1;
+      }
+
+    }
+    
+    if (INTERNAL_FLAG_1 == 0) {                           //main screen
+      u8g2.setFont(u8g2_font_nokiafc22_tr);
+      u8g2.drawStr(19, 7, "Feedback");
+      u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
+      u8g2.drawStr(1, 17, "Vibration");
+      u8g2.drawStr(1, 27, "Audio");
+
+      u8g2.setDrawColor(2);
+      if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 84, 10);   //vibration
+      if (DISP_PAGE_B == 1) u8g2.drawBox(0, 19, 84, 10);  //audio
+      u8g2.setDrawColor(1);
+    }
+
+
+    if (INTERNAL_FLAG_1 == 1) {                           //vibration menu
+      u8g2.setFont(u8g2_font_nokiafc22_tr);
+      u8g2.drawStr(19, 7, "Feedback");
+      u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
+      u8g2.drawStr(1, 17, "Keypress \"Vibes\"");
+      u8g2.drawStr(1, 27, "Vibe duration");
+
+      sprintf(DISP_INTERNAL_BUFFER, "%d", VIBRATION_ON_KEYPRESS);
+      DISP_CENTER_POINT = u8g2_GetStrWidth(u8g2.getU8g2(), DISP_INTERNAL_BUFFER);
+      u8g2.setCursor(76 - (DISP_CENTER_POINT / 2), 27);
+      u8g2.print(DISP_INTERNAL_BUFFER);
+
+      if (VIBRATION_ON_KEYPRESS_ENABLE == 1) u8g2.drawStr(75, 17, "X"); //check
+      u8g2.drawFrame(73, 10, 9, 7); //checkbox
+      u8g2.setDrawColor(2);
+      if (INTERNAL_FLAG_2 == 1) {
+        u8g2.drawBox(68, 19, 16, 10); //number
+        VIBRATION_ON_KEYPRESS = DISP_PAGE_B;
+      } else {
+      if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 71, 10); //toggle
+      if (DISP_PAGE_B == 1) u8g2.drawBox(0, 19, 68, 10);  //ms
+      }
+      u8g2.setDrawColor(1);
+      u8g2.drawFrame(0, 40, 84, 8); //box
+      u8g2.drawBox(1, 41, ((VIBRATION_ON_KEYPRESS * 82) / 255), 6); //bar
+    }
+
+
+    if (INTERNAL_FLAG_1 == 2) {                           //audio menu
+      u8g2.setFont(u8g2_font_nokiafc22_tr);
+      u8g2.drawStr(5, 7, "Audio feedback");
+      u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
+      u8g2.drawStr(1, 17, "Enable");
+      u8g2.drawStr(1, 27, "Duration");
+      u8g2.drawStr(1, 37, "Frequency");
+      u8g2.drawStr(1, 47, "Volume (pwm)");
+      
+      
+      sprintf(DISP_INTERNAL_BUFFER, "%dms", AUDIO_ON_KEYPRESS_DURATION);
+      DISP_CENTER_POINT = u8g2_GetStrWidth(u8g2.getU8g2(), DISP_INTERNAL_BUFFER);
+      u8g2.setCursor(70 - (DISP_CENTER_POINT / 2), 27);
+      u8g2.print(DISP_INTERNAL_BUFFER);
+
+      snprintf(DISP_INTERNAL_BUFFER, sizeof(DISP_INTERNAL_BUFFER), "%s%d%s", noteNames[(AUDIO_ON_KEYPRESS_FREQ / 2) % 12], (AUDIO_ON_KEYPRESS_FREQ / 2) / 12, (AUDIO_ON_KEYPRESS_FREQ % 2) ? "+" : "");
+      DISP_CENTER_POINT = u8g2_GetStrWidth(u8g2.getU8g2(), DISP_INTERNAL_BUFFER);
+      u8g2.setCursor(71 - (DISP_CENTER_POINT / 2), 37);
+      u8g2.print(DISP_INTERNAL_BUFFER);                 //written by evil spirits (chatgpt) no idea how it actually works, but it does
+      
+      u8g2.setCursor(68, 47);
+      u8g2.print(AUDIO_ON_KEYPRESS_VOLUME);
+
+      if (AUDIO_ON_KEYPRESS_ENABLE == 1) u8g2.drawStr(75, 17, "X");
+
+      u8g2.drawFrame(73, 10, 9, 7);
+
+      u8g2.setDrawColor(2);
+      if (INTERNAL_FLAG_2 == 0) {
+        if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 71, 10);   //toggle
+        if (DISP_PAGE_B == 3) u8g2.drawBox(0, 19, 55, 10);  //length
+        if (DISP_PAGE_B == 2) u8g2.drawBox(0, 29, 59, 10);  //freq
+        if (DISP_PAGE_B == 1) u8g2.drawBox(0, 39, 66, 10);  //vol
+      }
+      if (INTERNAL_FLAG_2 > 0) {
+        if (INTERNAL_FLAG_2 == 1) u8g2.drawBox(66, 39, 18, 10), AUDIO_ON_KEYPRESS_VOLUME = DISP_PAGE_B; //vol
+        if (INTERNAL_FLAG_2 == 2) u8g2.drawBox(59, 29, 25, 10), AUDIO_ON_KEYPRESS_FREQ = DISP_PAGE_B; //freq
+        if (INTERNAL_FLAG_2 == 3) u8g2.drawBox(55, 19, 29, 10), AUDIO_ON_KEYPRESS_DURATION = DISP_PAGE_B; //length
+      }
+      u8g2.setDrawColor(1);
+    }
+
+  }
+
+/*
   if (DISP_PAGE_C == 5) {                               //keyboard vibration new version (mostly copied from backlight)
 
     if (KB_BUFFER == 'E' && KB_BEEN_READ == false) {
@@ -999,6 +1294,7 @@ void loop() {
     u8g2.drawBox(1, 41, ((VIBRATION_ON_KEYPRESS * 82) / 255), 6); //bar
     if (KB_BUFFER == 'B' && KB_BEEN_READ == false) digitalWrite(PIN_VIBES, LOW), EEPROM.put(8, VIBRATION_ON_KEYPRESS_ENABLE), EEPROM.put(9, VIBRATION_ON_KEYPRESS);
   }
+*/
 
   if (DISP_PAGE_C == 6) {                               //debouncing
 
@@ -1089,7 +1385,7 @@ void loop() {
     u8g2.drawFrame(73, 10, 9, 7); //checkbox
     u8g2.setDrawColor(2);
     if (INTERNAL_FLAG_1 == 1) {
-      u8g2.drawBox(58, 19, 26, 10); //number
+      u8g2.drawBox(55, 19, 29, 10); //number
       KB_DOUBLE_PRESS_TIME = DISP_PAGE_B;
     } else {
     if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 71, 10); //toggle
@@ -1197,7 +1493,7 @@ void loop() {
     u8g2.setCursor(0, 20);
     u8g2.print("entewr to toggle");
     u8g2.setCursor(0, 30);
-    if (KB_TAP_OR_T9 == 1) u8g2.print("gui wip, am sleepy");
+    if (KB_TAP_OR_T9 == 1) u8g2.print("T9 Mode");
     if (KB_BUFFER == 'E' && KB_BEEN_READ == false) {
       if (DISP_PAGE_B == 0) {
         if (KB_TAP_OR_T9 >= 1) {
@@ -1271,7 +1567,7 @@ void loop() {
       if (DISP_PAGE_B == 1) DISP_PAGE_C = 3, DISP_NUM_OPTIONS = 0, EEPROM.get(5, INTERNAL_FLAG_1);          //mode, i should think of a better name
     } else if (DISP_PAGE_A == 21) {
       if (DISP_PAGE_B == 0) DISP_PAGE_C = 4, DISP_NUM_OPTIONS = 1, INTERNAL_FLAG_1 = 0;  //Lights
-      if (DISP_PAGE_B == 5) DISP_PAGE_C = 5, DISP_PAGE_B = 0, DISP_NUM_OPTIONS = 1, INTERNAL_FLAG_1 = 0;  //Vibration
+      if (DISP_PAGE_B == 5) DISP_PAGE_C = 5, DISP_PAGE_B = 0, DISP_NUM_OPTIONS = 1, INTERNAL_FLAG_1 = 0, INTERNAL_FLAG_2 = 0;  //Feedback
       if (DISP_PAGE_B == 4) DISP_PAGE_C = 6, DISP_PAGE_B = 0, DISP_NUM_OPTIONS = 1, INTERNAL_FLAG_1 = 0;  //Debouncing
       if (DISP_PAGE_B == 3) DISP_PAGE_C = 7, DISP_PAGE_B = 0, DISP_NUM_OPTIONS = 1, INTERNAL_FLAG_1 = 0;  //Double tap
       if (DISP_PAGE_B == 2) DISP_PAGE_C = 8, DISP_PAGE_B = 0, DISP_NUM_OPTIONS = 2, INTERNAL_FLAG_1 = 0;  //hold repeat
@@ -1289,7 +1585,7 @@ void loop() {
     if (DISP_PAGE_C == 2) DISP_PAGE_C = 0, DISP_PAGE_B = 2, DISP_NUM_OPTIONS = 2;   //backlight
     if (DISP_PAGE_C == 3) DISP_PAGE_C = 0, DISP_PAGE_B = 1, DISP_NUM_OPTIONS = 2;   //mode
     if (DISP_PAGE_C == 4) DISP_PAGE_C = 0, DISP_PAGE_B = 0, DISP_NUM_OPTIONS = 5;   //(kb)lights
-    if (DISP_PAGE_C == 5) DISP_PAGE_C = 0, DISP_PAGE_B = 5, DISP_NUM_OPTIONS = 5;   //vibration
+    if (DISP_PAGE_C == 5) DISP_PAGE_C = 0, DISP_PAGE_B = 5, DISP_NUM_OPTIONS = 5;   //feedback
     if (DISP_PAGE_C == 6) DISP_PAGE_C = 0, DISP_PAGE_B = 4, DISP_NUM_OPTIONS = 5;   //debounce
     if (DISP_PAGE_C == 7) DISP_PAGE_C = 0, DISP_PAGE_B = 3, DISP_NUM_OPTIONS = 5;   //double tap
     if (DISP_PAGE_C == 8) DISP_PAGE_C = 0, DISP_PAGE_B = 2, DISP_NUM_OPTIONS = 5;   //hold repeat
@@ -1392,4 +1688,13 @@ void kb_scan() {
     KB_HOLD_REPEAT_TIMER = 0; 
   }
 
+}
+
+void playMidi(int pin, const int notes[][3], size_t len){
+ for (int i = 0; i < len; i++) {
+    tone(pin, notes[i][0]);
+    delay(notes[i][1]);
+    noTone(pin);
+    delay(notes[i][2]);
+  }
 }
