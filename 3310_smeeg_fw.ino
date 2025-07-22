@@ -19,7 +19,7 @@ extern "C" {
 #define PIN_BATTERY_VOLTAGE PA1
 #define PIN_BATTERY_CHARGE PA5
 
-//https://www.st.com/en/development-tools/stm32cubeprog.html
+
 
 float BATTERY_VOLTAGE = 0;
 int BATTERY_CHARGING = 0;             //no idea why but a bool or byte just does not work for this
@@ -589,10 +589,9 @@ void loop() {
     u8g2.setCursor(1, 17);
     
     
-    //u8g2.print(DISP_MESSAGE_BUFFER);
+    
     DISP_MESSAGE_LENGTH = (u8g2.getUTF8Width(String(DISP_MESSAGE_BUFFER).c_str()) + 1);
     u8g2.setCursor (0, 15);
-
       int start = 0;
       int end = 0;
       int wordcount = 0;
@@ -603,7 +602,8 @@ void loop() {
       int a = 0;
       const char* t9word = "";
 
-    while(DISP_MESSAGE_BUFFER[start] != '\0') {
+
+      while(DISP_MESSAGE_BUFFER[start] != '\0') {
 
       end = start;
 
@@ -641,9 +641,9 @@ void loop() {
         cursor_x += spacewidth;
         end++;
       }
-
       start = end;
     }
+
 
     if (cursor_y >= 48) {
       DISP_SCROLL_OFFSET = cursor_y - 48;
@@ -662,68 +662,7 @@ void loop() {
     u8g2.setDrawColor(2);
     u8g2.drawBox(0, 0, 84, 8);
     u8g2.setDrawColor(1);
-    u8g2.drawLine(0, 7, 83, 7);
-/*
-
-        
-      wordcount2[wordcount] = (u8g2.getUTF8Width(DISP_INTERNAL_BUFFER_2) - 0);
-      wordcount++;
-
-      if (DISP_MESSAGE_BUFFER[end] == ' ') {
-        end++;
-      }
-      start = end;
-
-      wordlen = 0; 
-      for ( int i = 0; i < wordcount; i++ ) wordlen += wordcount2[ i ];
-      wordlen = (wordlen - 3);
-        
-      if (wordlen > 84) {
-        u8g2.setCursor(0, (cursor_offset + 8));
-
-      }
-      u8g2.print(DISP_INTERNAL_BUFFER_2);
-    }
-
-    for ( int i = 0; i < wordcount; i++ ) wordlen += wordcount2[ i ];
-*/
-/*
-    DISP_MESSAGE_PRINT_X = 1;
-    DISP_MESSAGE_PRINT_Y = 27;
-    DISP_INTERNAL_BUFFER_2[1] = '\0';
-    for (int i = 0; i <= 10; i++) {
-      DISP_INTERNAL_BUFFER_2[0] = DISP_MESSAGE_BUFFER[i];
-      if (DISP_MESSAGE_PRINT_X + (u8g2.getUTF8Width(String(DISP_INTERNAL_BUFFER_2).c_str()) + 1) > 82) {
-        DISP_MESSAGE_PRINT_X = 0;
-        DISP_MESSAGE_PRINT_Y += 10;
-      }
-      u8g2.setCursor(DISP_MESSAGE_PRINT_X, DISP_MESSAGE_PRINT_Y);
-      u8g2.print(DISP_INTERNAL_BUFFER_2);
-      DISP_MESSAGE_PRINT_X += (u8g2.getUTF8Width(DISP_INTERNAL_BUFFER_2) + 1);
-    }
-
-    for (int i = 0; i < strlen(DISP_MESSAGE_BUFFER); i++) {
-
-     if (u8g2.getUTF8Width(DISP_MESSAGE_BUFFER) > 82) {
-      DISP_INTERNAL_BUFFER_2 = DISP_MESSAGE_BUFFER + 20;
-      u8g2.drawStr(1, 33, offsetText);
-     } 
-    }
-
-    for (int i = 0; i < strlen(DISP_MESSAGE_BUFFER); i++) {
-      DISP_INTERNAL_BUFFER_2[0] = DISP_MESSAGE_BUFFER[i];
-      DISP_INTERNAL_BUFFER_2[1] = '\0';
-      DISP_CENTER_POINT = (DISP_CENTER_POINT + u8g2.getUTF8Width(DISP_INTERNAL_BUFFER_2));
-
-      if (DISP_CENTER_POINT > 82) {
-        u8g2.setCursor(DISP_CENTER_POINT, 33);
-      } else {
-        u8g2.setCursor(DISP_CENTER_POINT, 23);
-      }
-      
-      u8g2.print(DISP_INTERNAL_BUFFER_2);
-    }
-*/  
+    u8g2.drawLine(0, 7, 83, 7); 
 /*
 0 = confirm, add space
 /\
@@ -746,21 +685,24 @@ B = return from typing
     if (KB_BUFFER >= '1' && KB_BUFFER <= '9') {
       u8g2.print(KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]);
       DISP_INTERNAL_BUFFER[0] = (KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]);
-      
     }
+    
     if (KB_BUFFER == '0') {
       u8g2.print(">");
       DISP_INTERNAL_BUFFER[0] = ' ';
     }
+    
     if (KB_BEEN_READ == false && KB_BUFFER == '#') {
       DISP_MESSAGE_BUFFER[DISP_MESSAGE_BUFFER_INDEX] = DISP_INTERNAL_BUFFER[0];
       DISP_MESSAGE_BUFFER_INDEX++;
       INTERNAL_FLAG_1++;
       DISP_MESSAGE_BUFFER[DISP_MESSAGE_BUFFER_INDEX] = '\0';
     }
-
-    if ((KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]) == '\0') KB_DOUBLE_PRESS_EVENT_COUNT = 0;
     
+    if (KB_BUFFER >= '1' && KB_BUFFER <= '9') {
+      if ((KB_TAPMAP[KB_BUFFER - '0'][KB_DOUBLE_PRESS_EVENT_COUNT - 1]) == '\0') KB_DOUBLE_PRESS_EVENT_COUNT = 0;
+    }
+
     if (KB_BUFFER == '0' && KB_BEEN_READ == false) {
       DISP_TEXT_BUFFER[0] = '\0';
       DISP_TEXT_BUFFER_INDEX = 0;
@@ -811,6 +753,7 @@ B = return from typing
         KB_TAP_OR_T9 = 0;
       }
     }
+
 
     
 
