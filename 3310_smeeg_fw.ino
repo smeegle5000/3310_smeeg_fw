@@ -19,7 +19,18 @@ extern "C" {
 #define PIN_BATTERY_VOLTAGE PA1
 #define PIN_BATTERY_CHARGE PA5
 
+HardwareSerial RF_SERIAL(PC11, PC10);
+#define PIN_RF_ENABLE  PB9   // Module enable, high to enable
+#define PIN_RF_POWER_SELECT  PC13  // inverted signal due to transistor (i think?) 0v = high power mode
+#define PIN_RF_PTT  PC0   // active low (i think?, again)
+#define PIN_RF_AUDIO_OUT PA1  //unused thus far
+#define PIN_RF_AUDIO_IN PA4  //unused thus far
 
+uint8_t RF_ENABLE = 0;
+uint8_t RF_POWER_SELECT = 0;
+uint8_t RF_PTT = 0;
+
+uint8_t USB_ENABLED = 0;
 
 float BATTERY_VOLTAGE = 0;
 int BATTERY_CHARGING = 0;             //no idea why but a bool or byte just does not work for this
@@ -240,6 +251,14 @@ void setup() {
   pinMode(PIN_POWER_OFF, OUTPUT);
   //
 
+  pinMode(PIN_RF_ENABLE, OUTPUT);
+  pinMode(PIN_RF_POWER_SELECT, OUTPUT);
+  pinMode(PIN_RF_PTT, OUTPUT);
+  pinMode(PIN_RF_AUDIO_OUT, OUTPUT);
+  pinMode(PIN_RF_AUDIO_IN, INPUT);
+
+
+
 
   DISP_TEXT_BUFFER[0] = '\0';
   DISP_MESSAGE_BUFFER[0] = '\0';
@@ -278,6 +297,7 @@ void setup() {
   }
 
   KB_TAP_OR_T9 = 1;
+
 }
 
 void loop() {
@@ -448,143 +468,11 @@ void loop() {
     if (DISP_PAGE_B == 1) u8g2.drawBox(0, 39, 84, 9);
     u8g2.setDrawColor(1);
   }
+
   if (DISP_PAGE_A == 10) {                   //messaging submenu
     u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(17, 7, "Messaging");
-    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
-    u8g2.drawStr(5, 28, "(work in progress)");
-  }
-  if (DISP_PAGE_A == 11) {                    //inbox submenu
-    u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(29, 7, "Inbox");
-    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
-    u8g2.drawStr(5, 28, "(work in progress)");
-    playMidi(PIN_BUZZER, midi1, ARRAY_LEN(midi1));
-  }
-  if (DISP_PAGE_A == 12) {                   //settings submenu
-    u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(23, 7, "Settings");
-    
-    u8g2.setFont(NokiaSmallPlain);
-    u8g2.drawStr(1, 17, "Display");
-    u8g2.drawStr(1, 27, "Keyboard");
-    u8g2.drawStr(1, 37, "Radio");
-    u8g2.drawStr(1, 47, "Debug");
-    u8g2.setDrawColor(2);
-    if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 84, 10);
-    if (DISP_PAGE_B == 3) u8g2.drawBox(0, 19, 84, 10);
-    if (DISP_PAGE_B == 2) u8g2.drawBox(0, 29, 84, 10);
-    if (DISP_PAGE_B == 1) u8g2.drawBox(0, 39, 84, 9);
-    u8g2.setDrawColor(1);
-  }
-  if (DISP_PAGE_A == 13) {                   //info submenu
-    u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(33, 7, "Info");
-    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
-    u8g2.drawStr(1, 15, "3310 smeeg fw v0.4");
-    u8g2.drawStr(1, 23, "based on sp5wwp's");
-    u8g2.drawStr(1, 31, "M17_3310-fw.  Also");
-    u8g2.drawStr(1, 39, "Implements spwwp's");
-    //u8g2.drawStr(1, 47, "T9 typing library");
-    //tone(PIN_BUZZER, 27.5 * pow(2.0, map(AUDIO_ON_KEYPRESS_FREQ, 0, 255, 0, 87) / 12.0), AUDIO_ON_KEYPRESS_DURATION);
-    //AUDIO_ON_KEYPRESS_FREQ++;
-    //u8g2.setCursor(1, 47);
-    //u8g2.print(AUDIO_ON_KEYPRESS_FREQ);
-    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
-    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
-
-    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
-    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
-
-    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
-    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
-
-    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
-    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
-
-    tone(PIN_BUZZER, 277, 118);  delay(118);  // C#4
-    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
-
-    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
-    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
-
-    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
-    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
-
-    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
-    tone(PIN_BUZZER, 196, 118); delay(176);   // G3
-    delay (2000);
-
-  }
-  if (DISP_PAGE_A == 20) {                                              //display
-    u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(25, 7, "Display");
-    u8g2.setFont(NokiaSmallPlain);
-    u8g2.drawStr(1, 17, "Contrast");
-    u8g2.drawStr(1, 27, "Backlight");
-    u8g2.drawStr(1, 37, "Mode");
-    u8g2.setDrawColor(2);
-    if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 84, 10);
-    if (DISP_PAGE_B == 2) u8g2.drawBox(0, 19, 84, 10);
-    if (DISP_PAGE_B == 1) u8g2.drawBox(0, 29, 84, 10);
-    u8g2.setDrawColor(1);
-  }
-  if (DISP_PAGE_A == 21) {       //keyboard               
-    
-    if (DISP_PAGE_B == 1) {
-      DISP_SCROLL_OFFSET = 20;
-    } else if (DISP_PAGE_B == 2) {
-      DISP_SCROLL_OFFSET = 10;
-    } else {
-      DISP_SCROLL_OFFSET = 0;
-    }
-
-
-    u8g2.setFont(NokiaSmallPlain);
-    u8g2.drawStr(1, (17 - DISP_SCROLL_OFFSET), "Lights");
-    u8g2.drawStr(1, (27 - DISP_SCROLL_OFFSET), "Feedback");
-    u8g2.drawStr(1, (37 - DISP_SCROLL_OFFSET), "Debouncing");
-    u8g2.drawStr(1, (47 - DISP_SCROLL_OFFSET), "Double tap");
-    u8g2.drawStr(1, (57 - DISP_SCROLL_OFFSET), "Hold repeat");
-    u8g2.drawStr(1, (67 - DISP_SCROLL_OFFSET), "Typing");
-
-    u8g2.drawBox(0, 0, 84, 9);      //draw two boxes on top of each other to clear out anything that may be scrolled into this space
-    u8g2.setDrawColor(2);
-    u8g2.drawBox(0, 0, 84, 9);      //one is normal, the one on top is inverted, to create a box of "clear"
-    if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 84, 10);
-    if (DISP_PAGE_B == 5) u8g2.drawBox(0, 19, 84, 10);
-    if (DISP_PAGE_B == 4) u8g2.drawBox(0, 29, 84, 10);
-    if (DISP_PAGE_B == 3) u8g2.drawBox(0, 39, 84, 10);
-    if (DISP_PAGE_B == 2) u8g2.drawBox(0, (49 - DISP_SCROLL_OFFSET), 84, 10);
-    if (DISP_PAGE_B == 1) u8g2.drawBox(0, (59 - DISP_SCROLL_OFFSET), 84, 10);
-    u8g2.setDrawColor(1);
-    
-    if (DISP_PAGE_B == 1) {
-      u8g2.drawXBM(73, 0, 5, 3, icon_arrow_up);
-    } else if (DISP_PAGE_B == 2) {
-      u8g2.drawXBM(73, 5, 5, 3, icon_arrow_down);
-      u8g2.drawXBM(73, 0, 5, 3, icon_arrow_up);
-    } else {
-      u8g2.drawXBM(73, 5, 5, 3, icon_arrow_down);
-    }
-
-    u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(18, 7, "Keyboard");
-  }
-
-  if (DISP_PAGE_A == 22) {                                                   //radio
-    u8g2.setFont(u8g2_font_nokiafc22_tr);
-    u8g2.drawStr(29, 7, "Radio");
-    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
-    u8g2.drawStr(5, 28, "(work in progress)");
-    
-  }
-
-
-  if (DISP_PAGE_A == 23) {                                      //debug
-    u8g2.setFont(u8g2_font_nokiafc22_tr);
     u8g2.setCursor(27, 7);
-    u8g2.print("Debug");
+    u8g2.print("WIP");
     u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
     u8g2.setCursor(1, 17);
     
@@ -770,6 +658,206 @@ B = return from typing
     u8g2.setCursor(u8g2.getUTF8Width(DISP_MESSAGE_BUFFER), 17);
     u8g2.print(".");
     */
+  }
+
+  if (DISP_PAGE_A == 11) {                    //inbox submenu
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    u8g2.drawStr(29, 7, "Inbox");
+    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
+    u8g2.drawStr(5, 28, "(work in progress)");
+    playMidi(PIN_BUZZER, midi1, ARRAY_LEN(midi1));
+  }
+  if (DISP_PAGE_A == 12) {                   //settings submenu
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    u8g2.drawStr(23, 7, "Settings");
+    
+    u8g2.setFont(NokiaSmallPlain);
+    u8g2.drawStr(1, 17, "Display");
+    u8g2.drawStr(1, 27, "Keyboard");
+    u8g2.drawStr(1, 37, "Radio");
+    u8g2.drawStr(1, 47, "Debug");
+    u8g2.setDrawColor(2);
+    if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 84, 10);
+    if (DISP_PAGE_B == 3) u8g2.drawBox(0, 19, 84, 10);
+    if (DISP_PAGE_B == 2) u8g2.drawBox(0, 29, 84, 10);
+    if (DISP_PAGE_B == 1) u8g2.drawBox(0, 39, 84, 9);
+    u8g2.setDrawColor(1);
+  }
+  if (DISP_PAGE_A == 13) {                   //info submenu
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    u8g2.drawStr(33, 7, "Info");
+    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
+    u8g2.drawStr(1, 15, "3310 smeeg fw v0.4");
+    u8g2.drawStr(1, 23, "based on sp5wwp's");
+    u8g2.drawStr(1, 31, "M17_3310-fw.  Also");
+    u8g2.drawStr(1, 39, "Implements spwwp's");
+    //u8g2.drawStr(1, 47, "T9 typing library");
+    //tone(PIN_BUZZER, 27.5 * pow(2.0, map(AUDIO_ON_KEYPRESS_FREQ, 0, 255, 0, 87) / 12.0), AUDIO_ON_KEYPRESS_DURATION);
+    //AUDIO_ON_KEYPRESS_FREQ++;
+    //u8g2.setCursor(1, 47);
+    //u8g2.print(AUDIO_ON_KEYPRESS_FREQ);
+    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
+    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
+
+    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
+    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
+
+    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
+    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
+
+    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
+    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
+
+    tone(PIN_BUZZER, 277, 118);  delay(118);  // C#4
+    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
+
+    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
+    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
+
+    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
+    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
+
+    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
+    tone(PIN_BUZZER, 196, 118); delay(176);   // G3
+    delay (2000);
+
+  }
+  if (DISP_PAGE_A == 20) {                                              //display
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    u8g2.drawStr(25, 7, "Display");
+    u8g2.setFont(NokiaSmallPlain);
+    u8g2.drawStr(1, 17, "Contrast");
+    u8g2.drawStr(1, 27, "Backlight");
+    u8g2.drawStr(1, 37, "Mode");
+    u8g2.setDrawColor(2);
+    if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 84, 10);
+    if (DISP_PAGE_B == 2) u8g2.drawBox(0, 19, 84, 10);
+    if (DISP_PAGE_B == 1) u8g2.drawBox(0, 29, 84, 10);
+    u8g2.setDrawColor(1);
+  }
+  if (DISP_PAGE_A == 21) {       //keyboard               
+    
+    if (DISP_PAGE_B == 1) {
+      DISP_SCROLL_OFFSET = 20;
+    } else if (DISP_PAGE_B == 2) {
+      DISP_SCROLL_OFFSET = 10;
+    } else {
+      DISP_SCROLL_OFFSET = 0;
+    }
+
+
+    u8g2.setFont(NokiaSmallPlain);
+    u8g2.drawStr(1, (17 - DISP_SCROLL_OFFSET), "Lights");
+    u8g2.drawStr(1, (27 - DISP_SCROLL_OFFSET), "Feedback");
+    u8g2.drawStr(1, (37 - DISP_SCROLL_OFFSET), "Debouncing");
+    u8g2.drawStr(1, (47 - DISP_SCROLL_OFFSET), "Double tap");
+    u8g2.drawStr(1, (57 - DISP_SCROLL_OFFSET), "Hold repeat");
+    u8g2.drawStr(1, (67 - DISP_SCROLL_OFFSET), "Typing");
+
+    u8g2.drawBox(0, 0, 84, 9);      //draw two boxes on top of each other to clear out anything that may be scrolled into this space
+    u8g2.setDrawColor(2);
+    u8g2.drawBox(0, 0, 84, 9);      //one is normal, the one on top is inverted, to create a box of "clear"
+    if (DISP_PAGE_B == 0) u8g2.drawBox(0, 9, 84, 10);
+    if (DISP_PAGE_B == 5) u8g2.drawBox(0, 19, 84, 10);
+    if (DISP_PAGE_B == 4) u8g2.drawBox(0, 29, 84, 10);
+    if (DISP_PAGE_B == 3) u8g2.drawBox(0, 39, 84, 10);
+    if (DISP_PAGE_B == 2) u8g2.drawBox(0, (49 - DISP_SCROLL_OFFSET), 84, 10);
+    if (DISP_PAGE_B == 1) u8g2.drawBox(0, (59 - DISP_SCROLL_OFFSET), 84, 10);
+    u8g2.setDrawColor(1);
+    
+    if (DISP_PAGE_B == 1) {
+      u8g2.drawXBM(73, 0, 5, 3, icon_arrow_up);
+    } else if (DISP_PAGE_B == 2) {
+      u8g2.drawXBM(73, 5, 5, 3, icon_arrow_down);
+      u8g2.drawXBM(73, 0, 5, 3, icon_arrow_up);
+    } else {
+      u8g2.drawXBM(73, 5, 5, 3, icon_arrow_down);
+    }
+
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    u8g2.drawStr(18, 7, "Keyboard");
+  }
+
+  if (DISP_PAGE_A == 22) {                                                   //radio
+    u8g2.setFont(u8g2_font_nokiafc22_tr);
+    u8g2.drawStr(29, 7, "Radio");
+    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
+    u8g2.drawStr(5, 28, "(work in progress)");
+    
+  }
+
+
+  if (DISP_PAGE_A == 23) {                                      //debug
+    u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
+    u8g2.drawStr(0, 37, "enable usb ");
+    u8g2.drawStr(1, 14, "RF ENABLE");
+    u8g2.drawStr(1, 22, "RF POWER");
+    u8g2.drawStr(1, 30, "RF PTT");
+    u8g2.drawStr(1, 47, "ptt active low i think");
+    u8g2.drawStr(47, 7, "high");
+    u8g2.drawStr(66, 7, "low");
+
+    if (RF_ENABLE == 0) u8g2.drawStr(66, 14, "x");
+    if (RF_POWER_SELECT == 0) u8g2.drawStr(66, 21, "x");
+    if (RF_PTT == 0) u8g2.drawStr(66, 28, "x");
+    if (USB_ENABLED == 0) u8g2.drawStr(66, 36, "x");
+
+    if (RF_ENABLE == 1) u8g2.drawStr(52, 14, "x");
+    if (RF_POWER_SELECT == 1) u8g2.drawStr(52, 21, "x");
+    if (RF_PTT == 1) u8g2.drawStr(52, 28, "x");
+    if (USB_ENABLED == 1) u8g2.drawStr(52, 36, "x");
+
+    if (DISP_PAGE_B == 0) u8g2.drawStr(77, 14, "<");
+    if (DISP_PAGE_B == 3) u8g2.drawStr(77, 22, "<");
+    if (DISP_PAGE_B == 2) u8g2.drawStr(77, 30, "<");
+    if (DISP_PAGE_B == 1) u8g2.drawStr(77, 38, "<");
+
+    if (KB_BUFFER == 'E' && KB_BEEN_READ == false) {
+      if (DISP_PAGE_B == 0 && RF_ENABLE == 0) {
+          RF_ENABLE = 1;
+          goto bruh;
+        }
+      if (DISP_PAGE_B == 3 && RF_POWER_SELECT == 0) {RF_POWER_SELECT = 1; goto bruh;}
+      if (DISP_PAGE_B == 2 && RF_PTT == 0) {RF_PTT = 1; goto bruh;}
+      if (DISP_PAGE_B == 1 && USB_ENABLED == 0) {
+        USB_ENABLED = 1;
+        Serial.begin(9600);
+        Serial.println("SA868 serial bridge ready. Type AT commands:");
+        RF_SERIAL.begin(9600);
+        goto bruh;
+      }
+    }
+    if (KB_BUFFER == 'E' && KB_BEEN_READ == false) {
+      if (DISP_PAGE_B == 0 && RF_ENABLE == 1) {RF_ENABLE = 0; goto bruh;}
+      if (DISP_PAGE_B == 3 && RF_POWER_SELECT == 1) {RF_POWER_SELECT = 0; goto bruh;}
+      if (DISP_PAGE_B == 2 && RF_PTT == 1) {RF_PTT = 0; goto bruh;}
+      if (DISP_PAGE_B == 1 && USB_ENABLED == 1) {USB_ENABLED = 0; goto bruh;}
+    }
+    bruh:
+
+    if (RF_ENABLE == 1) digitalWrite(PIN_RF_ENABLE, HIGH);
+    if (RF_ENABLE == 0) digitalWrite(PIN_RF_ENABLE, LOW);
+
+    if (RF_POWER_SELECT == 1) digitalWrite(PIN_RF_POWER_SELECT, HIGH);
+    if (RF_POWER_SELECT == 0) digitalWrite(PIN_RF_POWER_SELECT, LOW);
+
+    if (RF_PTT == 1) digitalWrite(PIN_RF_PTT, HIGH);
+    if (RF_PTT == 0) digitalWrite(PIN_RF_PTT, LOW);
+
+
+    if (USB_ENABLED == 1) {
+      // Forward PC → SA868
+      while (Serial.available()) {
+        char c = Serial.read();
+        RF_SERIAL.write(c);
+      }
+
+      // Forward SA868 → PC
+      while (RF_SERIAL.available()) {
+        char c = RF_SERIAL.read();
+        Serial.write(c);
+      }
+    }
   }
 
 
@@ -1493,7 +1581,7 @@ B = return from typing
       DISP_PAGE_B = 0;
       DISP_NUM_OPTIONS = 3;
     } else if (DISP_PAGE_A == 1) {
-      if (DISP_PAGE_B == 0) DISP_PAGE_A = 10;  //messaging
+      if (DISP_PAGE_B == 0) DISP_PAGE_A = 10, DISP_TEXT_BUFFER[0] = '\0', DISP_TEXT_BUFFER_INDEX = 0, DISP_SCROLL_OFFSET = 0;  //messaging
       if (DISP_PAGE_B == 3) DISP_PAGE_A = 11;  //inbox
       if (DISP_PAGE_B == 2) DISP_PAGE_A = 12;  //settings
       if (DISP_PAGE_B == 1) DISP_PAGE_A = 13;  //info
@@ -1502,7 +1590,7 @@ B = return from typing
       if (DISP_PAGE_B == 0) DISP_PAGE_A = 20, DISP_NUM_OPTIONS = 2;  //display
       if (DISP_PAGE_B == 3) DISP_PAGE_A = 21, DISP_NUM_OPTIONS = 5;  //keyboard
       if (DISP_PAGE_B == 2) DISP_PAGE_A = 22;                        //radio
-      if (DISP_PAGE_B == 1) DISP_PAGE_A = 23, DISP_TEXT_BUFFER[0] = '\0', DISP_TEXT_BUFFER_INDEX = 0, DISP_SCROLL_OFFSET = 0;                        //debug
+      if (DISP_PAGE_B == 1) DISP_PAGE_A = 23;                        //debug
       DISP_PAGE_B = 0;
     } else if (DISP_PAGE_A == 20) {
       if (DISP_PAGE_B == 0) DISP_PAGE_C = 1, DISP_NUM_OPTIONS = 255, DISP_PAGE_B = DISP_CONTRAST;                            //contrast
