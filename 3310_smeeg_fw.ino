@@ -171,8 +171,21 @@ void setup() {
   //setup display, set contrast, display splash screen
   u8g2.begin();
 
+  //setup keyboard matrix, need to do it as a first step to allow reading the * button for soft reset
+  for (uint8_t i = 0; i < KB_NUM_ROW; i++) {  //increment through all row pins, define as input pins, hardware pull down resistors are in place
+    pinMode(KB_ROW_PINS[i], INPUT);
+  }
+  for (uint8_t j = 0; j < KB_NUM_COL; j++) {  //increment through all col pins, define as output pins, and set to high
+    pinMode(KB_COL_PINS[j], OUTPUT);
+  }
 
-  EEPROM.get(0, INTERNAL_TIMER_2);   //i'm not this rn so i may as well save defining another variable for this
+
+  EEPROM.get(0, INTERNAL_TIMER_2);   //i'm not using this rn so i may as well save defining another variable for this
+  
+  digitalWrite(PB12, HIGH);  //manually trigger the row for the * button
+  if (digitalRead(PC8) == HIGH) INTERNAL_TIMER_2 = 0;  //if * is pressed, reset settings
+  digitalWrite(PB12, LOW);   //put it back on fear of breaking the kb scanning thing at the bottom of the code
+
   if (INTERNAL_TIMER_2 != 69) {
     u8g2.clearBuffer();
     u8g2.setContrast(110); //"safe" default value
@@ -235,14 +248,6 @@ void setup() {
     u8g2.sendBuffer();
   }
 
-  //setup keyboard matrix
-    for (uint8_t i = 0; i < KB_NUM_ROW; i++) {  //increment through all row pins, define as input pins, hardware pull down resistors are in place
-    pinMode(KB_ROW_PINS[i], INPUT);
-  }
-    for (uint8_t j = 0; j < KB_NUM_COL; j++) {  //increment through all col pins, define as output pins, and set to high
-    pinMode(KB_COL_PINS[j], OUTPUT);
-  }
-
 
   pinMode(KB_BUTTON_ENTER, INPUT);       //define enter pin, hardware contains pullup
   pinMode(PIN_BATTERY_VOLTAGE, INPUT_ANALOG);
@@ -272,24 +277,15 @@ void setup() {
   }
   analogReadResolution(8);
   
-  
+BATTERY_AVERAGE[0] = analogRead(PIN_BATTERY_VOLTAGE);       //BULLSHIT BULLSHIT BULLSHIT BULLSHIT BULLSHIT
+delay(20);                                                  //BULLSHIT BULLSHIT BULLSHIT BULLSHIT BULLSHIT
 
-  BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);       //populates battery voltage average values so it doesnt slowly rise on boot
-  BATTERY_AVERAGE_INDEX++;                                                        //because it only measures vbat every .5s to slow down the jitter on the hundredths digit
-  BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);       //i should probably make a for loop but cant be arsed
-  BATTERY_AVERAGE_INDEX++;
-  BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);
-  BATTERY_AVERAGE_INDEX++;
-  BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);
-  BATTERY_AVERAGE_INDEX++;
-  BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);
-  BATTERY_AVERAGE_INDEX++;
-  BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);
-  BATTERY_AVERAGE_INDEX++;
-  BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);
-  BATTERY_AVERAGE_INDEX++;
+for (int i = 0; i < 8; i++) {                               //populates battery voltage average values so it doesnt slowly rise on boot
+  BATTERY_AVERAGE[i] = analogRead(PIN_BATTERY_VOLTAGE);     //because it only measures vbat every .5s to slow down the jitter on the hundredths digit
+}
 
-  strcpy(DISP_TITLE_TEXT, "M17 IARU R1");                                         //TEMP UNTIL I MAKE THIS USER DEFINABLE
+
+strcpy(DISP_TITLE_TEXT, "M17 IARU R1");                                         //TEMP UNTIL I MAKE THIS USER DEFINABLE
 
 
   if (INTERNAL_FLAG_1 == 1) {                                                     //boot delay so we can show the goods (m17 boot splash)
@@ -346,16 +342,18 @@ void loop() {
     INTERNAL_TIMER_1 = millis();
     INTERNAL_TIMER_2++;
 
-    BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);
-    BATTERY_AVERAGE_INDEX++;
-
     if (BATTERY_AVERAGE_INDEX > 8) {                                                            //run every 8 readings of the voltage
       BATTERY_AVERAGE_INDEX = 0;                                                                //reset index to 0 so new values can fill in the old to average
     }
 
+    BATTERY_AVERAGE[BATTERY_AVERAGE_INDEX] = analogRead(PIN_BATTERY_VOLTAGE);
+    BATTERY_AVERAGE_INDEX++;
+
+    BATTERY_VOLTAGE = 0;                                                                        //zero out the voltage average, for some reason it still works fine without this
     for (int i = 0; i < 8; i++) {
       BATTERY_VOLTAGE = BATTERY_VOLTAGE + BATTERY_AVERAGE[i];                                   //average together the 8 battery voltage readings
     }
+
     BATTERY_VOLTAGE = (BATTERY_VOLTAGE / 8) * 0.02588;                                          //calculate decimal voltage reading from the average resistor voltage divider input
     //BATTERY_VOLTAGE_16 = constrain((BATTERY_VOLTAGE - 3.2) * (16.0 / (4.2 - 3.2)), 0, 16);    //create 16 level battery indicator for fancy battery meter
     BATTERY_VOLTAGE_16 = ((BATTERY_VOLTAGE - 3.2) * 16);
@@ -684,6 +682,9 @@ B = return from typing
     u8g2.setDrawColor(1);
   }
   if (DISP_PAGE_A == 13) {                   //info submenu
+
+  
+  /*
     u8g2.setFont(u8g2_font_nokiafc22_tr);
     u8g2.drawStr(33, 7, "Info");
     u8g2.setFont(u8g2_font_NokiaSmallPlain_tr);
@@ -691,36 +692,12 @@ B = return from typing
     u8g2.drawStr(1, 23, "based on sp5wwp's");
     u8g2.drawStr(1, 31, "M17_3310-fw.  Also");
     u8g2.drawStr(1, 39, "Implements spwwp's");
-    //u8g2.drawStr(1, 47, "T9 typing library");
+    u8g2.drawStr(1, 47, "T9 typing library");
     //tone(PIN_BUZZER, 27.5 * pow(2.0, map(AUDIO_ON_KEYPRESS_FREQ, 0, 255, 0, 87) / 12.0), AUDIO_ON_KEYPRESS_DURATION);
     //AUDIO_ON_KEYPRESS_FREQ++;
     //u8g2.setCursor(1, 47);
     //u8g2.print(AUDIO_ON_KEYPRESS_FREQ);
-    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
-    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
-
-    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
-    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
-
-    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
-    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
-
-    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
-    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
-
-    tone(PIN_BUZZER, 277, 118);  delay(118);  // C#4
-    tone(PIN_BUZZER, 164, 118);  delay(176);  // E3
-
-    tone(PIN_BUZZER, 196, 118);  delay(118);  // G3
-    tone(PIN_BUZZER, 261, 118);  delay(176);  // C4
-
-    tone(PIN_BUZZER, 164, 118);  delay(118);  // E3
-    tone(PIN_BUZZER, 196, 118);  delay(176);  // G3
-
-    tone(PIN_BUZZER, 246, 118);  delay(118);  // B3
-    tone(PIN_BUZZER, 196, 118); delay(176);   // G3
-    delay (2000);
-
+  */
   }
   if (DISP_PAGE_A == 20) {                                              //display
     u8g2.setFont(u8g2_font_nokiafc22_tr);
